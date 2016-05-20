@@ -28,13 +28,16 @@ void ImageSampleDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bot
   class_num_ = this->layer_param_.image_sample_data_param().class_num();
   const int new_height = this->layer_param_.image_sample_data_param().new_height();
   const int new_width  = this->layer_param_.image_sample_data_param().new_width();
+  const int new_dim = this->layer_param_.image_sample_data_param().new_dim();
   const bool is_color  = this->layer_param_.image_sample_data_param().is_color();
   string root_folder = this->layer_param_.image_sample_data_param().root_folder();
 
   CHECK((new_height == 0 && new_width == 0) ||
       (new_height > 0 && new_width > 0)) << "Current implementation requires "
       "new_height and new_width to be set at the same time.";
-  // Read the files of each class with filenames and labels
+  CHECK(!(new_dim > 0 && new_height > 0 && new_width > 0)) << "Both new_dim and "
+      "(new_height + new_width) cannot be non-zero at the same time."
+  // Read the file of categories
   lines_.resize(class_num_);
   lines_id_.resize(class_num_);
   const string& source = this->layer_param_.image_data_param().source();
@@ -46,7 +49,7 @@ void ImageSampleDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bot
     files.push_back(filename);
   }
   CHECK_EQ(files.size(), class_num_) << "class_num and number of files must be equal.";
-
+  // Read the image files of each category with image_name and label
   int label;
   for (int i=0; i<class_num_; i++) {
     const string& file = files[i];
@@ -57,8 +60,8 @@ void ImageSampleDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bot
     }
   }
   
-  // randomly shuffle data
-  LOG(INFO) << "Shuffling data";
+  // randomly shuffle category
+  LOG(INFO) << "Shuffling category";
   const unsigned int prefetch_rng_seed = caffe_rng_rand();
   prefetch_rng_.reset(new Caffe::RNG(prefetch_rng_seed));
   ShuffleClass();
@@ -68,6 +71,7 @@ void ImageSampleDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bot
     amount += lines_[i].size();
     lines_size_.push_back(lines_[i].size());
   }
+  // log the total number of training images
   LOG(INFO) << "A total of " << amount << " images.";
 
   class_id_ = 0;
@@ -82,7 +86,7 @@ void ImageSampleDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bot
   }
   // Read an image, and use it to initialize the top blob.
   cv::Mat cv_img = ReadImageToCVMat(root_folder + lines_[0][lines_id_[0]].first,
-                                    new_height, new_width, is_color);
+                                    new_height, new_width, new_dim, is_color);
   CHECK(cv_img.data) << "Could not load " << lines_[0][lines_id_[0]].first;
   // Use data_transformer to infer the expected blob shape from a cv_image.
   vector<int> top_shape = this->data_transformer_->InferBlobShape(cv_img);
@@ -137,13 +141,14 @@ void ImageSampleDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
   const int batch_size = image_data_param.batch_size();
   const int new_height = image_data_param.new_height();
   const int new_width = image_data_param.new_width();
+  const int new_dim = image_data_param.new_dim();
   const bool is_color = image_data_param.is_color();
   string root_folder = image_data_param.root_folder();
 
   // Reshape according to the first image of each batch
   // on single input batches allows for inputs of varying dimension.
   cv::Mat cv_img = ReadImageToCVMat(root_folder + lines_[class_id_][lines_id_[class_id_]].first,
-      new_height, new_width, is_color);
+      new_height, new_width, new_dim, is_color);
   CHECK(cv_img.data) << "Could not load " << lines_[class_id_][lines_id_[class_id_]].first;
   // Use data_transformer to infer the expected blob shape from a cv_img.
   vector<int> top_shape = this->data_transformer_->InferBlobShape(cv_img);
@@ -161,7 +166,7 @@ void ImageSampleDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
     timer.Start();
     CHECK_GT(lines_size_[class_id_], lines_id_[class_id_]);
     cv::Mat cv_img = ReadImageToCVMat(root_folder + lines_[class_id_][lines_id_[class_id_]].first,
-        new_height, new_width, is_color);
+        new_height, new_width, new_dim, is_color);
     CHECK(cv_img.data) << "Could not load " << lines_[class_id_][lines_id_[class_id_]].first;
     read_time += timer.MicroSeconds();
     timer.Start();
