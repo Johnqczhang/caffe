@@ -40,7 +40,7 @@ void ImageSampleDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bot
   // Read the file of categories
   lines_.resize(class_num_);
   lines_id_.resize(class_num_);
-  const string& source = this->layer_param_.image_data_param().source();
+  const string& source = this->layer_param_.image_sample_data_param().source();
   LOG(INFO) << "Opening file " << source;
   std::ifstream insource(source.c_str());
   string filename;
