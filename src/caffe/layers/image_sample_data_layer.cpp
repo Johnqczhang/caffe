@@ -36,7 +36,7 @@ void ImageSampleDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bot
       (new_height > 0 && new_width > 0)) << "Current implementation requires "
       "new_height and new_width to be set at the same time.";
   CHECK(!(new_dim > 0 && new_height > 0 && new_width > 0)) << "Both new_dim and "
-      "(new_height + new_width) cannot be non-zero at the same time."
+      "(new_height + new_width) cannot be non-zero at the same time.";
   // Read the file of categories
   lines_.resize(class_num_);
   lines_id_.resize(class_num_);
