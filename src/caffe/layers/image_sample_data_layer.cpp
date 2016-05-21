@@ -67,12 +67,6 @@ void ImageSampleDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bot
       lines_[i].push_back(std::make_pair(filename, label));
     }
   }
-  
-  // randomly shuffle category
-  LOG(INFO) << "Shuffling category";
-  const unsigned int prefetch_rng_seed = caffe_rng_rand();
-  prefetch_rng_.reset(new Caffe::RNG(prefetch_rng_seed));
-  ShuffleClass();
 
   unsigned int amount = 0;
   for (int i=0; i<class_num_; i++) {
@@ -82,7 +76,19 @@ void ImageSampleDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bot
   // log the total number of training images
   LOG(INFO) << "A total of " << amount << " images.";
 
+  // randomly shuffle categories
+  LOG(INFO) << "Shuffling categories";
+  const unsigned int prefetch_rng_seed = caffe_rng_rand();
+  prefetch_rng_.reset(new Caffe::RNG(prefetch_rng_seed));
+  ShuffleClass();
+  // randomly shuffle images of each category
+  LOG(INFO) << "Shuffling images";
+  for (int i=0; i<class_num_; i++) {
+    ShuffleImages(i);
+  }
+
   class_id_ = 0;
+
   // Check if we would need to randomly skip a few data points
   if (this->layer_param_.image_sample_data_param().rand_skip()) {
     for (int i=0; i<class_num_; i++) {
