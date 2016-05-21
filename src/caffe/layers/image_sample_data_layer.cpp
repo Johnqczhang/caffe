@@ -15,6 +15,14 @@
 #include "caffe/util/math_functions.hpp"
 #include "caffe/util/rng.hpp"
 
+#include <algorithm>
+#include <iterator>
+
+#include "boost/random/mersenne_twister.hpp"
+#include "boost/random/uniform_int.hpp"
+
+#include "caffe/common.hpp"
+
 namespace caffe {
 
 template <typename Dtype>
@@ -115,9 +123,21 @@ template <typename Dtype>
 void ImageSampleDataLayer<Dtype>::ShuffleClass() {
   caffe::rng_t* prefetch_rng =
       static_cast<caffe::rng_t*>(prefetch_rng_->generator());
-  shuffle(lines_.begin(), lines_.end(), prefetch_rng);
-  shuffle(lines_id_.begin(), lines_id_.end(), prefetch_rng);
-  shuffle(lines_size_.begin(), lines_size_.end(), prefetch_rng);
+  // shuffle(lines_.begin(), lines_.end(), prefetch_rng);
+  // shuffle(lines_id_.begin(), lines_id_.end(), prefetch_rng);
+  // shuffle(lines_size_.begin(), lines_size_.end(), prefetch_rng);
+  typedef typename boost::uniform_int<int> dist_type;
+
+  int length = std::distance(lines_.begin(), lines_.end());
+  if (length <= 0) return;
+
+  for (int i = length - 1; i > 0; --i) {
+    dist_type dist(0, i);
+    int random = dist(*prefetch_rng);
+    std::iter_swap(lines_.begin() + i, lines_.begin() + random);
+    std::iter_swap(lines_id_.begin() + i, lines_id_.begin() + random);
+    std::iter_swap(lines_size_.begin() + i, lines_size_.begin() + random);
+  }
 }
 
 template <typename Dtype>
