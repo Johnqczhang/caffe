@@ -110,7 +110,7 @@ cv::Mat ReadImageToCVMat(const string& filename,
       new_height = min_dim;
       new_width = round(scale_factor * cv_img_origin.cols);
     }
-    cv::resize(cv_img_origin, cv_img, cv::Size(width, height));
+    cv::resize(cv_img_origin, cv_img, cv::Size(new_width, new_height));
     return cv_img;
   }
 
