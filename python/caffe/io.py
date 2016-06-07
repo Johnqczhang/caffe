@@ -46,7 +46,7 @@ def array_to_blobproto(arr, diff=None):
     return blob
 
 
-def arraylist_to_blobprotovector_str(arraylist):
+def arraylist_to_blobprotovecor_str(arraylist):
     """Converts a list of arrays to a serialized blobprotovec, which could be
     then passed to a network for processing.
     """
@@ -63,7 +63,7 @@ def blobprotovector_str_to_arraylist(str):
     return [blobproto_to_array(blob) for blob in vec.blobs]
 
 
-def array_to_datum(arr, label=None):
+def array_to_datum(arr, label=0):
     """Converts a 3-dimensional array to datum. If the array has dtype uint8,
     the output data will be encoded as a string. Otherwise, the output data
     will be stored in float format.
@@ -76,8 +76,7 @@ def array_to_datum(arr, label=None):
         datum.data = arr.tostring()
     else:
         datum.float_data.extend(arr.flat)
-    if label is not None:
-        datum.label = label
+    datum.label = label
     return datum
 
 
@@ -382,7 +381,80 @@ def oversample(images, crop_dims):
         crops[ix-5:ix] = crops[ix-5:ix, :, ::-1, :]  # flip for mirrors
     return crops
 
-def oversample_new(image, crop_dims):
+def oversample_new(image, crop_dims, resize_dims=None):
+    """
+    Crop images into the four corners, center, and their mirrored versions.
+    Parameters
+    ----------
+    image : iterable of (H x W x K) ndarrays
+    crop_dims : (height, width) tuple for the crops.
+    resize_dims : list of the shorter dims for resize before croping.
+    Returns
+    -------
+    crops : (*N x H x W x K) ndarray of crops for number of inputs N.
+    """
+    short_dim = 0 if image.shape[0] < image.shape[1] else 1
+    short = image.shape[short_dim]
+    long = image.shape[1-short_dim]
+    
+    if not resize_dims:
+        resize_dims = [short]
+    
+    N = len(resize_dims) * 36    
+    crops = np.empty((N, crop_dims[0], crop_dims[1],
+                      image.shape[-1]), dtype=np.float32)
+    crop_id = 0
+    for resize_dim in resize_dims:
+        #resize the image
+        if resize_dim == short:
+            l = long
+            im = image
+            new_dim = (resize_dim, l) if short_dim==0 else (l, resize_dim)
+        elif resize_dim < short:
+            raise ValueError("resize_dim %d samller than short dim %d" %(resize_dim, short))
+        else:
+            l = int(round(resize_dim*1.0 / short * long))
+            assert l >= short
+            new_dim = (resize_dim, l) if short_dim==0 else (l, resize_dim)
+            im = resize_image(image, new_dim)
+        
+        #take the left, center and right square of these resized images
+        for left in (0, (l-resize_dim)/2, l-resize_dim):
+            if short_dim == 0:
+                im_square = im[:, left:left+resize_dim, :]
+            else:
+                im_square = im[left:left+resize_dim, :, :]
+                
+            #crop 4 corners and center and resize im_square to crop_dims
+            # Dimensions and center.
+            crop_dims = np.array(crop_dims)
+            im_center = np.ones(2) * (resize_dim / 2.0)
+
+            # Make crop coordinates
+            h_indices = (0, resize_dim - crop_dims[0])
+            w_indices = (0, resize_dim - crop_dims[1])
+            crops_ix = np.empty((5, 4), dtype=int)
+            curr = 0
+            for i in h_indices:
+                for j in w_indices:
+                    crops_ix[curr] = (i, j, i + crop_dims[0], j + crop_dims[1])
+                    curr += 1
+            crops_ix[4] = np.tile(im_center, (1, 2)) + np.concatenate([
+                -crop_dims / 2.0,
+                 crop_dims / 2.0
+            ])
+            # Extract crops
+            for crop in crops_ix:
+                crops[crop_id] = im_square[crop[0]:crop[2], crop[1]:crop[3], :]
+                crop_id += 1
+            # Resize im_square to crop_dims
+            crops[crop_id] = resize_image(im_square, crop_dims)
+            crop_id += 1
+    assert crop_id == N/2
+    crops[N/2:N] = crops[0:N/2, :, ::-1, :]  # flip for mirrors
+    return crops
+
+def oversample_10(image, crop_dims):
     """
     Crop images into the four corners, center, and their mirrored versions.
 
@@ -425,3 +497,10 @@ def oversample_new(image, crop_dims):
         ix += 1
     crops[ix-5:ix] = crops[ix-5:ix, :, ::-1, :]  # flip for mirrors
     return crops
+    
+if __name__ == "__main__":
+    im = load_image("/home/cc/mycaffe/examples/images/cat.jpg")
+    im = resize_image(im, (300, 256))
+    crops = oversample_new(im, (224,224), [256,288,320,352])
+    for i in range(len(crops)):
+        imsave("crops/crop_%d.jpg"%i, crops[i])
