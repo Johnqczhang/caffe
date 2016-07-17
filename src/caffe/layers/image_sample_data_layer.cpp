@@ -216,7 +216,7 @@ void ImageSampleDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
       // We have reached the end. Restart from the first.
       DLOG(INFO) << "Restarting classes prefetching from start.";
       class_id_ = 0;
-//      ShuffleClass();
+     ShuffleClass();
     }
   }
   batch_timer.Stop();
