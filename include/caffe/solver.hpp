@@ -117,6 +117,9 @@ class Solver {
   vector<Callback*> callbacks_;
   vector<Dtype> losses_;
   Dtype smoothed_loss_;
+  Dtype max_accuracy; // max accuracy, initialize as threshold defined in solver.prototxt
+  Dtype max_accuracy_loss_;	// the loss when achieve max accuracy, initialize as 0
+  int max_accuracy_iter_;	// the iteration when achieve max accuracy, initialize as 0
 
   // The root solver that holds root nets (actually containing shared layers)
   // in data parallelism
