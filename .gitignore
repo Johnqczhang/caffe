@@ -46,6 +46,9 @@
 # PyCharm files
 .idea
 
+# Visual Studio Code files
+.vscode
+
 # OSX dir files
 .DS_Store
 
@@ -60,7 +63,9 @@ Makefile.config
 data/*
 models/*
 *.caffemodel
+*.caffemodel.h5
 *.solverstate
+*.solverstate.h5
 *.binaryproto
 *leveldb
 *lmdb
