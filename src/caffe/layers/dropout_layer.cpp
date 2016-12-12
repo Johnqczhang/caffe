@@ -38,20 +38,20 @@ void DropoutLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
   if (this->phase_ == TRAIN) {
     // Create random numbers
     caffe_rng_bernoulli(count, 1. - threshold_, mask);
-	if (scale_train_){
-		for (int i = 0; i < count; ++i) {
-			top_data[i] = bottom_data[i] * mask[i] * scale_;
-		}
-	}
-	else{
-		for (int i = 0; i < count; ++i) {
-			top_data[i] = bottom_data[i] * mask[i];
-		}
-	}
+    if (scale_train_){
+    	for (int i = 0; i < count; ++i) {
+    		top_data[i] = bottom_data[i] * mask[i] * scale_;
+    	}
+    }
+    else{
+    	for (int i = 0; i < count; ++i) {
+    		top_data[i] = bottom_data[i] * mask[i];
+    	}
+    }
   } else {
     caffe_copy(bottom[0]->count(), bottom_data, top_data);
-	if (!scale_train_)
-		caffe_scal<Dtype>(count, 1. / scale_, top_data);
+    if (!scale_train_)
+    	caffe_scal<Dtype>(count, 1. / scale_, top_data);
   }
 }
 
@@ -65,20 +65,20 @@ void DropoutLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
     if (this->phase_ == TRAIN) {
       const unsigned int* mask = rand_vec_.cpu_data();
       const int count = bottom[0]->count();
-	  if (scale_train_){
-		  for (int i = 0; i < count; ++i) {
-			  bottom_diff[i] = top_diff[i] * mask[i] * scale_;
-		  }
-	  }
-	  else{
-		  for (int i = 0; i < count; ++i) {
-			  bottom_diff[i] = top_diff[i] * mask[i];
-		  }
-	  }
+  	  if (scale_train_){
+  		  for (int i = 0; i < count; ++i) {
+  			  bottom_diff[i] = top_diff[i] * mask[i] * scale_;
+  		  }
+  	  }
+  	  else{
+  		  for (int i = 0; i < count; ++i) {
+  			  bottom_diff[i] = top_diff[i] * mask[i];
+  		  }
+  	  }
     } else {
       caffe_copy(top[0]->count(), top_diff, bottom_diff);
-	  if (!scale_train_)
-		  caffe_scal<Dtype>(top[0]->count(), 1. / scale_, bottom_diff);
+  	  if (!scale_train_)
+  		  caffe_scal<Dtype>(top[0]->count(), 1. / scale_, bottom_diff);
     }
   }
 }
