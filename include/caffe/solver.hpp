@@ -12,7 +12,7 @@ namespace caffe {
 /**
   * @brief Enumeration of actions that a client of the Solver may request by
   * implementing the Solver's action request function, which a
-  * a client may optionally provide in order to request early termination
+  * client may optionally provide in order to request early termination
   * or saving a snapshot without exiting. In the executable caffe, this
   * mechanism is used to allow the snapshot to be saved when stopping
   * execution with a SIGINT (Ctrl-C).
@@ -117,6 +117,9 @@ class Solver {
   vector<Callback*> callbacks_;
   vector<Dtype> losses_;
   Dtype smoothed_loss_;
+  Dtype max_accuracy; // max accuracy, initialize as threshold defined in solver.prototxt
+  Dtype max_accuracy_loss_;	// the loss when achieve max accuracy, initialize as 0
+  int max_accuracy_iter_;	// the iteration when achieve max accuracy, initialize as 0
 
   // The root solver that holds root nets (actually containing shared layers)
   // in data parallelism

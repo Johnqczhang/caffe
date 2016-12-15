@@ -27,21 +27,29 @@ void ImageDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top) {
   const int new_height = this->layer_param_.image_data_param().new_height();
   const int new_width  = this->layer_param_.image_data_param().new_width();
+  const int new_dim = this->layer_param_.image_data_param().new_dim();
   const bool is_color  = this->layer_param_.image_data_param().is_color();
   string root_folder = this->layer_param_.image_data_param().root_folder();
 
   CHECK((new_height == 0 && new_width == 0) ||
       (new_height > 0 && new_width > 0)) << "Current implementation requires "
       "new_height and new_width to be set at the same time.";
+  CHECK(!(new_dim > 0 && new_height > 0 && new_width > 0)) << "Both new_dim and "
+      "(new_height + new_width) cannot be non-zero at the same time.";
   // Read the file with filenames and labels
   const string& source = this->layer_param_.image_data_param().source();
   LOG(INFO) << "Opening file " << source;
   std::ifstream infile(source.c_str());
-  string filename;
+  string line;
+  size_t pos;
   int label;
-  while (infile >> filename >> label) {
-    lines_.push_back(std::make_pair(filename, label));
+  while (std::getline(infile, line)) {
+    pos = line.find_last_of(' ');
+    label = atoi(line.substr(pos + 1).c_str());
+    lines_.push_back(std::make_pair(line.substr(0, pos), label));
   }
+
+  CHECK(!lines_.empty()) << "File is empty";
 
   if (this->layer_param_.image_data_param().shuffle()) {
     // randomly shuffle data
@@ -63,7 +71,7 @@ void ImageDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
   }
   // Read an image, and use it to initialize the top blob.
   cv::Mat cv_img = ReadImageToCVMat(root_folder + lines_[lines_id_].first,
-                                    new_height, new_width, is_color);
+                                    new_height, new_width, new_dim, is_color);
   CHECK(cv_img.data) << "Could not load " << lines_[lines_id_].first;
   // Use data_transformer to infer the expected blob shape from a cv_image.
   vector<int> top_shape = this->data_transformer_->InferBlobShape(cv_img);
@@ -109,13 +117,14 @@ void ImageDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
   const int batch_size = image_data_param.batch_size();
   const int new_height = image_data_param.new_height();
   const int new_width = image_data_param.new_width();
+  const int new_dim = image_data_param.new_dim();
   const bool is_color = image_data_param.is_color();
   string root_folder = image_data_param.root_folder();
 
   // Reshape according to the first image of each batch
   // on single input batches allows for inputs of varying dimension.
   cv::Mat cv_img = ReadImageToCVMat(root_folder + lines_[lines_id_].first,
-      new_height, new_width, is_color);
+      new_height, new_width, new_dim, is_color);
   CHECK(cv_img.data) << "Could not load " << lines_[lines_id_].first;
   // Use data_transformer to infer the expected blob shape from a cv_img.
   vector<int> top_shape = this->data_transformer_->InferBlobShape(cv_img);
@@ -134,7 +143,7 @@ void ImageDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
     timer.Start();
     CHECK_GT(lines_size, lines_id_);
     cv::Mat cv_img = ReadImageToCVMat(root_folder + lines_[lines_id_].first,
-        new_height, new_width, is_color);
+        new_height, new_width, new_dim, is_color);
     CHECK(cv_img.data) << "Could not load " << lines_[lines_id_].first;
     read_time += timer.MicroSeconds();
     timer.Start();

@@ -166,6 +166,7 @@ void Solver<Dtype>::InitTestNets() {
     }
   }
   test_nets_.resize(num_test_net_instances);
+
   for (int i = 0; i < num_test_net_instances; ++i) {
     // Set the correct NetState.  We start with the solver defaults (lowest
     // precedence); then, merge in any NetState specified by the net_param
@@ -188,11 +189,26 @@ void Solver<Dtype>::InitTestNets() {
     }
     test_nets_[i]->set_debug_info(param_.debug_info());
   }
+
+  // Check whether threshold_top_k is set in solver.prototxt
+  CHECK(!param_.threshold_top_1() || !param_.threshold_top_5())
+	  << "Both threshold_top_1 and threshold_top_5 can not be set true at the same time.";
+
+  if (param_.threshold_top_1() || param_.threshold_top_5()) {
+	  CHECK_GT(param_.accuracy_threshold(), 0.0)
+		  << "accuracy_threshold should be greater than 0.";
+	  CHECK_LT(param_.accuracy_threshold(), 1.0)
+		  << "accuracy_threshold should be less than 1.0.";
+	  max_accuracy = param_.accuracy_threshold();
+	  max_accuracy_iter_ = 0;
+	  max_accuracy_loss_ = 0;
+	  LOG(INFO)
+		  << "Initial max_accuracy: " << max_accuracy << ", Iteration: " << max_accuracy_iter_;
+  }
 }
 
 template <typename Dtype>
 void Solver<Dtype>::Step(int iters) {
-  vector<Blob<Dtype>*> bottom_vec;
   const int start_iter = iter_;
   const int stop_iter = iter_ + iters;
   int average_loss = this->param_.average_loss();
@@ -220,7 +236,7 @@ void Solver<Dtype>::Step(int iters) {
     // accumulate the loss and gradient
     Dtype loss = 0;
     for (int i = 0; i < param_.iter_size(); ++i) {
-      loss += net_->ForwardBackward(bottom_vec);
+      loss += net_->ForwardBackward();
     }
     loss /= param_.iter_size();
     // average the loss across iterations for smoothed reporting
@@ -311,7 +327,7 @@ void Solver<Dtype>::Solve(const char* resume_file) {
   if (param_.display() && iter_ % param_.display() == 0) {
     int average_loss = this->param_.average_loss();
     Dtype loss;
-    net_->ForwardPrefilled(&loss);
+    net_->Forward(&loss);
 
     UpdateSmoothedLoss(loss, start_iter, average_loss);
 
@@ -341,9 +357,11 @@ void Solver<Dtype>::Test(const int test_net_id) {
       ShareTrainedLayersWith(net_.get());
   vector<Dtype> test_score;
   vector<int> test_score_output_id;
-  vector<Blob<Dtype>*> bottom_vec;
   const shared_ptr<Net<Dtype> >& test_net = test_nets_[test_net_id];
   Dtype loss = 0;
+  Dtype accuracy_top_1 = 0;	// top_1 accuracy of current test
+  Dtype accuracy_top_5 = 0;	// top_5 accuracy of current test
+  Dtype current_loss = 0;	// the loss of current test
   for (int i = 0; i < param_.test_iter(test_net_id); ++i) {
     SolverAction::Enum request = GetRequestedAction();
     // Check to see if stoppage of testing/training has been requested.
@@ -362,7 +380,7 @@ void Solver<Dtype>::Test(const int test_net_id) {
 
     Dtype iter_loss;
     const vector<Blob<Dtype>*>& result =
-        test_net->Forward(bottom_vec, &iter_loss);
+        test_net->Forward(&iter_loss);
     if (param_.test_compute_loss()) {
       loss += iter_loss;
     }
@@ -403,8 +421,62 @@ void Solver<Dtype>::Test(const int test_net_id) {
       loss_msg_stream << " (* " << loss_weight
                       << " = " << loss_weight * mean_score << " loss)";
     }
+	// Save the results of current test
+	if (output_name.find("top_1") != -1) {
+		accuracy_top_1 = mean_score;
+	}
+	if (output_name.find("top_5") != -1) {
+		accuracy_top_5 = mean_score;
+	}
+	if (i == test_score.size() - 1) {
+		current_loss = mean_score;
+	}
     LOG(INFO) << "    Test net output #" << i << ": " << output_name << " = "
               << mean_score << loss_msg_stream.str();
+  }
+  // If set threshod_top_1 is true, then compare the test score with the preset threshold value
+  // defined in solver.prototxt to decide whether save a snapshot
+  if (param_.threshold_top_1()) {
+	  if (accuracy_top_1 > max_accuracy 
+		  || (accuracy_top_1 == max_accuracy 
+		  && current_loss < max_accuracy_loss_)) {
+		  // Update max accuracy with its loss and iteartions
+		  //LOG(INFO) << "Update max top_1 accuracy: " << max_accuracy << "->"
+		  // << accuracy_top_1 << ", Iteartion: " << max_accuracy_iter_ << "->"
+		  // << iter_;
+		  max_accuracy = accuracy_top_1;
+		  max_accuracy_loss_ = current_loss;
+		  max_accuracy_iter_ = iter_;
+		  // Save a snapshot
+		  if (iter_ % param_.snapshot() != 0) {
+			  Snapshot();
+		  }
+	  }	  
+	  LOG(INFO) << "    Test net output #" << test_score.size() << ": " << "max_accuracy_top_1" << " = "
+		  << max_accuracy;
+	  LOG(INFO) << "    Test net output #" << test_score.size()+1 << ": " << "max_accuracy_top_1_iter" << " = "
+		  << max_accuracy_iter_;  	  
+  }
+  if (param_.threshold_top_5()) {
+	  if (accuracy_top_5 > max_accuracy
+		  || (accuracy_top_5 == max_accuracy
+		  && current_loss < max_accuracy_loss_)) {
+		  // Update max accuracy with its loss and iteartions
+		  //LOG(INFO) << "Update max top_5 accuracy: " << max_accuracy << "->"
+		  // << accuracy_top_5 << ", Iteartion: " << max_accuracy_iter_ << "->"
+		  // << iter_;
+		  max_accuracy = accuracy_top_5;
+		  max_accuracy_loss_ = current_loss;
+		  max_accuracy_iter_ = iter_;
+		  // Save a snapshot
+		  if (iter_ % param_.snapshot() != 0) {
+			  Snapshot();
+		  }
+	  }
+	  LOG(INFO) << "    Test net output #" << test_score.size() << ": " << "max_accuracy_top_5" << " = "
+		  << max_accuracy;
+	  LOG(INFO) << "    Test net output #" << test_score.size() + 1 << ": " << "max_accuracy_top_5_iter" << " = "
+		  << max_accuracy_iter_;
   }
 }
 

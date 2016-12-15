@@ -133,6 +133,10 @@ bool DecodeDatum(Datum* datum, bool is_color);
 cv::Mat ReadImageToCVMat(const string& filename,
     const int height, const int width, const bool is_color);
 
+// Add a new function that resize image isotropically
+cv::Mat ReadImageToCVMat(const string& filename, 
+    const int height, const int width, const int min_dim, const bool is_color);
+
 cv::Mat ReadImageToCVMat(const string& filename,
     const int height, const int width);
 

@@ -2,6 +2,8 @@ import numpy as np
 import skimage.io
 from scipy.ndimage import zoom
 from skimage.transform import resize
+# from skimage.transform import rescale
+# from scipy.misc import imsave
 
 try:
     # Python3 will most likely not be able to load protobuf
@@ -380,3 +382,181 @@ def oversample(images, crop_dims):
             ix += 1
         crops[ix-5:ix] = crops[ix-5:ix, :, ::-1, :]  # flip for mirrors
     return crops
+
+def oversample_10(image, crop_dims):
+    """
+    Standard 10 crops: Crop images into the four corners, center, and their mirrored versions.
+
+    Parameters
+    ----------
+    image : iterable of (H x W x K) ndarrays
+    crop_dims : (height, width) tuple for the crops.
+
+    Returns
+    -------
+    crops : (10 x H x W x K) ndarray of crops.
+    """
+    # Dimensions and center.
+    im_shape = np.array(image.shape)
+    crop_dims = np.array(crop_dims)
+    im_center = im_shape[:2] / 2.0
+
+    # Make crop coordinates
+    h_indices = (0, im_shape[0] - crop_dims[0])
+    w_indices = (0, im_shape[1] - crop_dims[1])
+    crops_ix = np.empty((5, 4), dtype=int)
+    curr = 0
+    for i in h_indices:
+        for j in w_indices:
+            crops_ix[curr] = (i, j, i + crop_dims[0], j + crop_dims[1])
+            curr += 1
+    crops_ix[4] = np.tile(im_center, (1, 2)) + np.concatenate([
+        -crop_dims / 2.0,
+         crop_dims / 2.0
+    ])
+    crops_ix = np.tile(crops_ix, (2, 1))
+
+    # Extract crops
+    crops = np.empty((10, crop_dims[0], crop_dims[1],
+                      im_shape[-1]), dtype=np.float32)
+    ix = 0
+
+    for crop in crops_ix:
+        crops[ix] = image[crop[0]:crop[2], crop[1]:crop[3], :]
+        ix += 1
+    crops[ix-5:ix] = crops[ix-5:ix, :, ::-1, :]  # flip for mirrors
+    return crops
+
+def oversample_12(image, crop_dims):
+    """
+    10 crops plus resize the square image into crop_dims with mirrored version.
+
+    Parameters
+    ----------
+    image : iterable of (H x W x K) ndarrays
+    crop_dims : (height, width) tuple for the crops.
+
+    Returns
+    -------
+    crops : (12 x H x W x K) ndarray of crops.
+    """
+    # get 10 crops
+    crops_10 = oversample_10(image, crop_dims)
+
+    # Dimensions and center.
+    im_shape = np.array(image.shape)
+    crop_dims = np.array(crop_dims)
+
+    # Extract crops
+    crops = np.empty((12, crop_dims[0], crop_dims[1],
+                      im_shape[-1]), dtype=np.float32)
+    crops[0:10, :, :, :] = crops_10
+    crops[10, :, :, :] = resize_image(image, crop_dims)
+    crops[11, :, :, :] = crops[10, :, ::-1, :]  # flip for mirrors
+
+    return crops
+
+def oversample_square(image, crop_dims, resize_dims=None):
+    """
+    Aggressive cropping (from GoogleNet): Given a square image, first rescale the image such that 
+    each side is in resize_dims list. Then, for each square, take the 4 corners, center as well as 
+    the square resized to crop_dims, and their mirrored versions.
+
+    Parameters
+    ----------
+    image : iterable of (H x W x K) ndarrays
+    crop_dims : (height, width) tuple for the crops.
+    resize_dims : list of the shorter dims for resize before cropping.
+
+    Returns
+    -------
+    crops : (N x H x W x K) ndarray of crops for number of inputs N.
+    """
+    if image.shape[0] < 256:
+        raise ValueError("image side: %d is smaller than 256." %resize_dim)
+    
+    # Do not resize if not specified resized dimensions
+    if not resize_dims:
+        resize_dims = [image.shape[0]]
+    
+    N = len(resize_dims) * 12    
+    crops = np.empty((N, crop_dims[0], crop_dims[1],
+                      image.shape[-1]), dtype=np.float32)
+    crop_id = 0
+
+    for resize_dim in resize_dims:
+        # resize the image
+        if resize_dim != image.shape[0]:
+            image = resize_image(image, (resize_dim, resize_dim))
+
+        # Extract 12 crops: 4 corners, center and the square resized to crop_dims, and their mirrored versions
+        crops[crop_id:crop_id+12] = oversample_12(image, crop_dims)
+        crop_id += 12
+                
+    return crops
+
+def oversample_rect(image, crop_dims, resize_dims=None):
+    """
+    Aggressive cropping (from GoogleNet): Given a rectangular image, first rescale the image such that 
+    the shorter side is in resize_dims list, then take the left, center and right square of these 
+    resized images (in the case of portrait images, take the top, center and bottom squares).
+    For each square, take the 4 corners, center as well as the square resized to crop_dims, and their 
+    mirrored versions.
+
+    Parameters
+    ----------
+    image : iterable of (H x W x K) ndarrays
+    crop_dims : (height, width) tuple for the crops.
+    resize_dims : list of the shorter dims for resize before cropping.
+
+    Returns
+    -------
+    crops : (N x H x W x K) ndarray of crops for number of inputs N.
+    """
+    # Get the shorter side of original image
+    short_dim = 0 if image.shape[0] < image.shape[1] else 1
+
+    # assert im_shape[short_dim] >= 256
+    if image.shape[short_dim] < 256:
+        raise ValueError("image shorter side: %d is smaller than 256." %resize_dim)
+    
+    # Dimensions of original image
+    short_side = image.shape[short_dim]
+    long_side = image.shape[1-short_dim]
+    
+    # Do not resize if not specified resized dimensions
+    if not resize_dims:
+        resize_dims = [short_side]
+    
+    N = len(resize_dims) * 36    
+    crops = np.empty((N, crop_dims[0], crop_dims[1],
+                      image.shape[-1]), dtype=np.float32)
+    crop_id = 0
+
+    for resize_dim in resize_dims:
+        # resize the image      
+        if resize_dim != short_side:
+            new_long_side = int(round(resize_dim*long_side * 1.0 / short_side))
+            new_dims = (resize_dim, new_long_side) if short_dim==0 else (new_long_side, resize_dim)
+            image = resize_image(image, new_dims)
+        
+        # take the left (or top), center and right (or bottom) square of these resized images
+        for left in (0, (new_long_side-resize_dim)/2, new_long_side-resize_dim):
+            if short_dim == 0:
+                im_square = image[:, left:left+resize_dim, :]
+            else:
+                im_square = image[left:left+resize_dim, :, :]
+
+            crops[crop_id:crop_id+12] = oversample_12(im_square, crop_dims)
+            crop_id += 12
+
+    # assert crop_id == N
+    return crops
+
+# The code snippets below is for debug and test
+# if __name__ == "__main__":
+#     im = load_image("cat.jpg")
+#     # im = resize_image(im, (300, 256))
+#     crops = oversample_new(im, (224,224), [256,288,320,352]) # 
+#     for i in range(len(crops)):
+#         imsave("crop_%d.jpg"%(i+1), crops[i])
