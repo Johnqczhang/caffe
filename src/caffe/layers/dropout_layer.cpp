@@ -50,7 +50,7 @@ void DropoutLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
   } else {
     caffe_copy(bottom[0]->count(), bottom_data, top_data);
     if (!scale_train_) {
-      caffe_scal<Dtype>(  count, 1. / scale_, top_data);
+      caffe_scal<Dtype>(count, 1. / scale_, top_data);
     }
   }
 }
