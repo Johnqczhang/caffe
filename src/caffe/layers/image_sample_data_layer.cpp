@@ -109,8 +109,8 @@ void ImageSampleDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bot
   const int batch_size = this->layer_param_.image_sample_data_param().batch_size();
   CHECK_GT(batch_size, 0) << "Positive batch size required";
   top_shape[0] = batch_size;
-  for (int i = 0; i < this->PREFETCH_COUNT; ++i) {
-    this->prefetch_[i].data_.Reshape(top_shape);
+  for (int i = 0; i < this->prefetch_.size(); ++i) {
+    this->prefetch_[i]->data_.Reshape(top_shape);
   }
   top[0]->Reshape(top_shape);
 
@@ -120,8 +120,8 @@ void ImageSampleDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bot
   // label
   vector<int> label_shape(1, batch_size);
   top[1]->Reshape(label_shape);
-  for (int i = 0; i < this->PREFETCH_COUNT; ++i) {
-    this->prefetch_[i].label_.Reshape(label_shape);
+  for (int i = 0; i < this->prefetch_.size(); ++i) {
+    this->prefetch_[i]->label_.Reshape(label_shape);
   }
 }
 
