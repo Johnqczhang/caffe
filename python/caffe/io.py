@@ -77,8 +77,9 @@ def array_to_datum(arr, label=0):
     if arr.dtype == np.uint8:
         datum.data = arr.tostring()
     else:
-        datum.float_data.extend(arr.flat)
-    datum.label = label
+        datum.float_data.extend(arr.astype(float).flat)
+    if label is not None:
+        datum.label = label
     return datum
 
 
